@@ -6,7 +6,7 @@ phases:
   build:
     commands:
       - aws cloudformation package --template-file template.yaml --s3-bucket bad-bots-code-bucket --output-template-file outputSamTemplate.yaml
-      - python -m pytest tests -sv
+      #- python -m pytest tests -sv
 
 artifacts:
   type: zip

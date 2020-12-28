@@ -1,0 +1,13 @@
+repos:
+  - repo: https://github.com/pre-commit/mirrors-pylint
+    rev: v2.3.1
+    hooks:
+      -   id: pylint
+          args:
+            - --max-line-length=125
+            - --ignore-imports=yes
+  - repo: https://github.com/aws-cloudformation/cfn-python-lint
+    rev: v0.40.0  # The version of cfn-lint to use
+    hooks:
+      -   id: cfn-python-lint
+          files: template.yaml

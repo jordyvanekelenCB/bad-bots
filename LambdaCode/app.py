@@ -1,10 +1,11 @@
 """ Entry point file """
 
+# pylint: disable=E0401
 import os
 import configparser
 import logging
-from .bad_bots import BadBots
-from .utilities import Diagnostics
+from bad_bots import BadBots
+from utilities import Diagnostics
 
 # Setup logger
 LOGGER = logging.getLogger()

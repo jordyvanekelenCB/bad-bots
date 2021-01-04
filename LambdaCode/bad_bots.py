@@ -1,11 +1,12 @@
 """ This file contains the BadBots class """
 
+# pylint: disable=E0611
 import logging
 from enum import Enum
 from ipaddress import ip_address
 from ipaddress import IPv4Network
 from ipaddress import IPv6Network
-from .connection import AWSWAFv2Connection
+from connection import AWSWAFv2Connection
 
 
 # Setup logger
@@ -58,7 +59,15 @@ class BadBots:
         elif source_ip_type.value == "IPV6":
             aws_wafv2_connection = AWSWAFv2Connection(self.config, self.SourceIPType.IPV6)
 
-        aws_wafv2_connection.update_ip_set(source_ip_address_list)
+        # Get current IP set
+        wafv2_response = aws_wafv2_connection.retrieve_ip_set()
+        current_block_list_entries = wafv2_response["IPSet"]["Addresses"]
+
+        # Merge block lists
+        merged_block_list_entries = source_ip_address_list + current_block_list_entries
+
+        # Update IP set with with newly merged block list
+        aws_wafv2_connection.update_ip_set(merged_block_list_entries)
 
     class SourceIPType(Enum):
         """ Subclass enum for BadBots class """

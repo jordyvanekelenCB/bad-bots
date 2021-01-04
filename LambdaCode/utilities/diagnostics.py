@@ -17,9 +17,10 @@ class Diagnostics:
     def print_results(bad_bots_output) -> None:
         """ Prints bad bots results to screen """
 
-        source_ip = bad_bots_output['source_ip']
-        source_ip_type = bad_bots_output['source_ip_type']
+        bad_bots_results = bad_bots_output['bad_bots_results']
 
+        source_ip = bad_bots_results['source_ip']
+        source_ip_type = bad_bots_results['source_ip_type']
 
         LOGGER.info('================================ Bad bots results ================================')
 

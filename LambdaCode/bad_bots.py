@@ -32,31 +32,43 @@ class BadBots:
         # Get source IP address
         source_ip = str(self.event['requestContext']['identity']['sourceIp'])
 
-        source_ip_type = "IPV%s" % ip_address(source_ip).version
+        # Get source IP type
+        source_ip_type = self.get_ip_type_by_address(source_ip)
 
         # Check the source IP type and then update the respective IP set
-        if source_ip_type == "IPV4":
+        if source_ip_type == self.SourceIPType.IPV4:
             source_ip_address_list.append(IPv4Network(source_ip).with_prefixlen)
             self.update_bad_bots_ip_set(self.SourceIPType.IPV4, source_ip_address_list)
-        elif source_ip_type == "IPV6":
+        if source_ip_type == self.SourceIPType.IPV6:
             source_ip_address_list.append(IPv6Network(source_ip).with_prefixlen)
             self.update_bad_bots_ip_set(self.SourceIPType.IPV6, source_ip_address_list)
 
         bad_bots_output = {
             "source_ip": source_ip,
-            "source_ip_type": source_ip_type
+            "source_ip_type": source_ip_type.value
         }
 
         return bad_bots_output
 
+    def get_ip_type_by_address(self, source_ip):
+        """ Get the IP address type based on the IP address provided  """
+
+        # Identify IP version
+        source_ip_type = "IPV%s" % ip_address(source_ip).version
+
+        if source_ip_type == "IPV4":
+            return self.SourceIPType.IPV4
+
+        return self.SourceIPType.IPV6
+
     def update_bad_bots_ip_set(self, source_ip_type, source_ip_address_list):
-        """ Updates a bad bots ip set, depending on the IP address type (IPv4/IPv6) """
+        """ Updates a bad bots IP set, depending on the IP address type """
 
         aws_wafv2_connection = None
 
-        if source_ip_type.value == "IPV4":
+        if source_ip_type == self.SourceIPType.IPV4:
             aws_wafv2_connection = AWSWAFv2Connection(self.config, self.SourceIPType.IPV4)
-        elif source_ip_type.value == "IPV6":
+        elif source_ip_type == self.SourceIPType.IPV6:
             aws_wafv2_connection = AWSWAFv2Connection(self.config, self.SourceIPType.IPV6)
 
         # Get current IP set

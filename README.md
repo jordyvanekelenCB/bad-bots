@@ -15,16 +15,19 @@ See the [AWS docs](https://docs.aws.amazon.com/solutions/latest/aws-waf-security
   ## Diagrams **AWS Architecture Diagram**     
  ![AWS Architecture Diagram](docs/diagrams/bad-bots-AWS-architecture-diagram.png)      
   
-- ##### AWS WAF - AWS WAF contains the WAFv2  IP sets which is used as a block list for the IP addresses detected by the Bad Bots Lambda function. 
-- ##### API Gateway trap endpoint - This is the API Gateway trap endpoint that will be used to lure in bad bots.
-- ##### Bad Bots Lambda - This Lambda function will be triggered by the API Gateway trap endpoint after a 'bad bot' makes a request.        
- - Then it will first determine the IP address type.  
- - Then it will update the respective IP set with the IP address of the bad bot.     
+- ##### AWS WAF 
+  - AWS WAF contains the WAFv2  IP sets which is used as a block list for the IP addresses detected by the Bad Bots Lambda function. 
+- ##### API Gateway trap endpoint 
+  - This is the API Gateway trap endpoint that will be used to lure in bad bots.
+- ##### Bad Bots Lambda 
+  - This Lambda function will be triggered by the API Gateway trap endpoint after a 'bad bot' makes a request.        
+   - Then it will first determine the IP address type.  
+  - Then it will update the respective IP set with the IP address of the bad bot.     
     
 **UML Class Diagram**        
  ![UML Class Diagram](docs/diagrams/bad-bots-UML-class-diagram.png)    
     
-**AWS IAM Diagram** ![AWS IAM Diagram](docs/diagrams/bad-bots-AWS-IAM-diagram.png)          
+**AWS IAM Diagram** ![AWS IAM Diagram](docs/diagrams/bad-bots-list-parser-AWS-IAM-diagram.png)          
     
 ## AWS Services      
 - [Lambda](https://aws.amazon.com/documentation/lambda)    

@@ -88,43 +88,6 @@ Resources:
         - Key: "Name"
           Value: !Sub "${AppGroup}-role"
 
-  ApiGatewayBadBotsCloudWatchRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub "${AppGroup}-api-gateway-role"
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Action: sts:AssumeRole
-            Effect: Allow
-            Principal:
-              Service: apigateway.amazonaws.com
-      Policies:
-        -  PolicyName: LambdaRestApiCloudWatchRole
-           PolicyDocument:
-             Version: '2012-10-17'
-             Statement:
-               - Action:
-                   - logs:CreateLogGroup
-                   - logs:CreateLogStream
-                   - logs:DescribeLogGroups
-                   - logs:DescribeLogStreams
-                   - logs:PutLogEvents
-                   - logs:GetLogEvents
-                   - logs:FilterLogEvents
-                 Effect: Allow
-                 Resource:
-                   - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*'
-      Tags:
-        - Key: "Name"
-          Value: !Sub '${Environment}-${AppGroup}-api-gateway-bad-bots-cloudformation-role'
-        - Key: "AppGroup"
-          Value: !Sub "${AppGroup}"
-        - Key: "AppRole"
-          Value: "ipset"
-        - Key: "Environment"
-          Value: !Sub "${Environment}"
-
 Outputs:
   BadBotsLambdaRole:
     Description: "The role ARN that should be used by the bad-bots lambda"

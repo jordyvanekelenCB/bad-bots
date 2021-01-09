@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "IAM resources for the Bad Bots component."
+Metadata:
+  Tags:
+    CostCenter: "hosting-deployment"
+Parameters:
+  AppGroup:
+    Type: "String"
+    Default: "bad-bots"
+    Description: "The name of the AppGroup"
+    AllowedPattern: "^[a-z0-9\\-]{1,32}$"
+  Environment:
+    Type: "AWS::SSM::Parameter::Value<String>"
+    Default: "/global/environment"
+  Region:
+    Description: "Specify the region"
+    Type: "String"
+    Default: "eu-west-1"
+    AllowedValues:
+      - "eu-west-1"
+
+Conditions:
+  isTestingEnvironment: !Equals [ !Ref Environment, testing ]
+
+Resources:
+
+  BadBotsManagedPolicyAWSWAFv2GetUpdateIPSet:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      Description: !Sub "Policy for managing WAFv2 IP blocklist ${AppGroup}"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - "wafv2:GetIPSet"
+              - "wafv2:UpdateIPSet"
+            Resource:
+              - !Sub "arn:aws:wafv2:${Region}:${AWS::AccountId}:regional/ipset/ip_set_bad_bots_ipv4/*"
+              - !Sub "arn:aws:wafv2:${Region}:${AWS::AccountId}:regional/ipset/ip_set_bad_bots_ipv6/*"
+              - !If
+                - isTestingEnvironment
+                - !Sub "arn:aws:wafv2:${Region}:${AWS::AccountId}:regional/ipset/ip_set_bad_bots_ipv4_test/*"
+                - !Ref AWS::NoValue
+              - !If
+                - isTestingEnvironment
+                - !Sub "arn:aws:wafv2:${Region}:${AWS::AccountId}:regional/ipset/ip_set_bad_bots_ipv6_test/*"
+                - !Ref AWS::NoValue
+
+  BadBotsManagedPolicyAWSWAFv2ListIPSet:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      Description: !Sub "Policy for managing WAFv2 IP blocklist ${AppGroup}"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - "wafv2:ListIPSets"
+            Resource: "*"
+
+  BadBotsParserLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub "${AppGroup}-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - !ImportValue "default-lambda-managed-policy-arn"
+        - !Ref "BadBotsManagedPolicyAWSWAFv2GetUpdateIPSet"
+        - !Ref "BadBotsManagedPolicyAWSWAFv2ListIPSet"
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      PermissionsBoundary: !ImportValue "iam-boundary-application-deployment-permission-boundary"
+      Tags:
+        - Key: "AppGroup"
+          Value: !Ref "AppGroup"
+        - Key: "AppRole"
+          Value: "role"
+        - Key: "Environment"
+          Value: !Ref "Environment"
+        - Key: "Name"
+          Value: !Sub "${AppGroup}-role"
+
+  ApiGatewayBadBotsCloudWatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppGroup}-api-gateway-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+      Policies:
+        -  PolicyName: LambdaRestApiCloudWatchRole
+           PolicyDocument:
+             Version: '2012-10-17'
+             Statement:
+               - Action:
+                   - logs:CreateLogGroup
+                   - logs:CreateLogStream
+                   - logs:DescribeLogGroups
+                   - logs:DescribeLogStreams
+                   - logs:PutLogEvents
+                   - logs:GetLogEvents
+                   - logs:FilterLogEvents
+                 Effect: Allow
+                 Resource:
+                   - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*'
+      Tags:
+        - Key: "Name"
+          Value: !Sub '${Environment}-${AppGroup}-api-gateway-bad-bots-cloudformation-role'
+        - Key: "AppGroup"
+          Value: !Sub "${AppGroup}"
+        - Key: "AppRole"
+          Value: "ipset"
+        - Key: "Environment"
+          Value: !Sub "${Environment}"
+
+Outputs:
+  BadBotsLambdaRole:
+    Description: "The role ARN that should be used by the bad-bots lambda"
+    Value: !GetAtt "BadBotsParserLambdaRole.Arn"
+    Export:
+      Name: !Sub "${AppGroup}-iam-role-arn"

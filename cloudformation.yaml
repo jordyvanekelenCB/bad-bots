@@ -1,0 +1,281 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: 'Bad Bots Lambda function'
+
+Metadata:
+  Tags:
+    CostCenter: "hosting-deployment"
+
+Parameters:
+  AppGroup:
+    Type: "String"
+    Default: "bad-bots"
+  Environment:
+    Type: "AWS::SSM::Parameter::Value<String>"
+    Default: "/global/environment"
+  Owner:
+    Type: "String"
+    Default: "security"
+    Description: "Used for alerting purposes."
+  Region:
+    Description: "Specify the region"
+    Type: "String"
+    Default: "eu-west-1"
+    AllowedValues:
+      - "eu-west-1"
+
+Conditions:
+  isTestingEnvironment: !Equals [ !Ref Environment, testing ]
+
+Mappings:
+  ImageOriginArnElbMap:
+    testing:
+      "arn" : "arn:aws:elasticloadbalancing:eu-west-1:608797611516:loadbalancer/app/testing-image-origin-elb/22c5f30272b1eaa9"
+    acceptance:
+      "arn" : "arn:aws:elasticloadbalancing:eu-west-1:253253097711:loadbalancer/app/acceptance-image-origin-elb/1d10216e950de44a"
+    production:
+      "arn" : "arn:aws:elasticloadbalancing:eu-west-1:772318034610:loadbalancer/app/production-image-origin-elb/dee736dc44c5cfc7"
+
+Resources:
+  BadBots:
+    Type: "AWS::Serverless::Function"
+    Properties:
+      FunctionName: "bad-bots"
+      CodeUri: ./LambdaCode
+      Handler: app.lambda_handler
+      Runtime: python3.8
+      Timeout: 900
+      Role: !ImportValue "bad-bots-iam-role-arn"
+      Environment:
+        Variables:
+          REGION: !Sub "${Region}"
+      Tags:
+        Name: !Sub "${AppGroup}-bat-bots"
+        AppGroup: !Sub "${AppGroup}"
+        AppRole: "function"
+        Environment: !Ref "Environment"
+        Owner: !Ref "Owner"
+
+  BadBotsIPSetBlockedIPV4:
+    Type: AWS::WAFv2::IPSet
+    Properties:
+      Name: ip_set_bad_bots_ipv4
+      Description: "This is the IP set used by the Bad Bots component and contains IPv4 addresses of blocked bad bots."
+      Scope: "REGIONAL"
+      IPAddressVersion: IPV4
+      Addresses: []
+      Tags:
+        - Key: "Name"
+          Value: !Sub '${Environment}-${AppGroup}-ip_set_bad_bots_ipv4'
+        - Key: "AppGroup"
+          Value: !Sub "${AppGroup}"
+        - Key: "AppRole"
+          Value: "ipset"
+        - Key: "Environment"
+          Value: !Sub "${Environment}"
+
+  BadBotsIPSetBlockedIPV6:
+    Type: AWS::WAFv2::IPSet
+    Properties:
+      Name: ip_set_bad_bots_ipv6
+      Description: "This is the IP set used by the Bad Bots component and contains IPv4 addresses of blocked bad bots."
+      Scope: "REGIONAL"
+      IPAddressVersion: IPV6
+      Addresses: [ ]
+      Tags:
+        - Key: "Name"
+          Value: !Sub '${Environment}-${AppGroup}-ip_set_bad_bots_ipv6'
+        - Key: "AppGroup"
+          Value: !Sub "${AppGroup}"
+        - Key: "AppRole"
+          Value: "ipset"
+        - Key: "Environment"
+          Value: !Sub "${Environment}"
+
+  BadBotsWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      DefaultAction:
+        Allow: {}
+      Description: This Web ACL is used to block bad bots that have been detected by the Bad Bots component through the API Gateway Honeypot.
+      Name: bad-bots-web-acl
+      Rules:
+        - Name: bad-bots-ipv4-block-rule
+          Action:
+            Count: {}
+          Priority: 1
+          Statement:
+            IPSetReferenceStatement:
+              Arn: !GetAtt "BadBotsIPSetBlockedIPV4.Arn"
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: True
+            MetricName: bad-bots-ipv4-block-rule-metric
+            SampledRequestsEnabled: True
+        - Name: bad-bots-ipv6-block-rule
+          Action:
+            Count: {}
+          Priority: 1
+          Statement:
+            IPSetReferenceStatement:
+              Arn: !GetAtt "BadBotsIPSetBlockedIPV6.Arn"
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: True
+            MetricName: bad-bots-ipv6-block-rule-metric
+            SampledRequestsEnabled: True
+      Scope: REGIONAL
+      Tags:
+        - Key: "Name"
+          Value: !Sub '${Environment}-${AppGroup}-acl'
+        - Key: "AppGroup"
+          Value: !Sub "${AppGroup}"
+        - Key: "AppRole"
+          Value: "Web ACL"
+        - Key: "Environment"
+          Value: !Sub "${Environment}"
+      VisibilityConfig:
+        CloudWatchMetricsEnabled: True
+        MetricName: bad-bots-web-acl-metric
+        SampledRequestsEnabled: True
+
+  BadBotsImageOriginWebACLAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !FindInMap
+        - ImageOriginArnElbMap
+        - !Ref Environment
+        - arn
+      WebACLArn: !GetAtt "BadBotsWebACL.Arn"
+
+  # -- Testing resources
+  BadBotsIPSetBlockedIPV4Test:
+    Type: AWS::WAFv2::IPSet
+    Condition: isTestingEnvironment
+    Properties:
+      Name: ip_set_bad_bots_ipv4_test
+      Description: "This is the test IP set used by the Bad Bots component and contains IPv4 addresses of blocked bad bots."
+      Scope: "REGIONAL"
+      IPAddressVersion: IPV4
+      Addresses: [ ]
+      Tags:
+        - Key: "Name"
+          Value: !Sub '${Environment}-${AppGroup}-ip_set_bad_bots_ipv4_test'
+        - Key: "AppGroup"
+          Value: !Sub "${AppGroup}"
+        - Key: "AppRole"
+          Value: "ipset"
+        - Key: "Environment"
+          Value: !Sub "${Environment}"
+
+  BadBotsIPSetBlockedIPV6Test:
+    Type: AWS::WAFv2::IPSet
+    Condition: isTestingEnvironment
+    Properties:
+      Name: ip_set_bad_bots_ipv6_test
+      Description: "This is the test IP set used by the Bad Bots component and contains IPv6 addresses of blocked bad bots."
+      Scope: "REGIONAL"
+      IPAddressVersion: IPV6
+      Addresses: [ ]
+      Tags:
+        - Key: "Name"
+          Value: !Sub '${Environment}-${AppGroup}-ip_set_bad_bots_ipv6_test'
+        - Key: "AppGroup"
+          Value: !Sub "${AppGroup}"
+        - Key: "AppRole"
+          Value: "ipset"
+        - Key: "Environment"
+          Value: !Sub "${Environment}"
+
+
+  # API Gateway resources
+  ApiGatewayBadBots:
+    Type: 'AWS::ApiGateway::RestApi'
+    Properties:
+      Name: Security Automation - WAF Bad Bot API
+      Description: This endpoint will be used to capture bad bots.
+
+  ApiGatewayBadBotsResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      RestApiId: !Ref ApiGatewayBadBots
+      ParentId: !GetAtt ApiGatewayBadBots.RootResourceId
+      PathPart: '{proxy+}'
+
+  ApiGatewayBadBotsMethodRoot:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      RestApiId: !Ref ApiGatewayBadBots
+      ResourceId: !GetAtt ApiGatewayBadBots.RootResourceId
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.header.X-Forwarded-For: false
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BadBots.Arn}/invocations"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W59
+            reason: "Creating a honeypot to lure badbots away."
+
+  ApiGatewayBadBotsMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      RestApiId: !Ref ApiGatewayBadBots
+      ResourceId: !Ref ApiGatewayBadBotsResource
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.header.X-Forwarded-For: false
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BadBots.Arn}/invocations"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W59
+            reason: "Creating a honeypot to lure badbots away."
+
+  ApiGatewayBadBotsDeployment:
+    Type: 'AWS::ApiGateway::Deployment'
+    Properties:
+      RestApiId: !Ref ApiGatewayBadBots
+      Description: CloudFormation Deployment Stage
+      StageName: CFDeploymentStage
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W45
+            reason: "Log not needed for this component."
+          -
+            id: W68
+            reason: "Usage Plan not required."
+
+  ApiGatewayBadBotsStage:
+    Type: 'AWS::ApiGateway::Stage'
+    Properties:
+      DeploymentId: !Ref ApiGatewayBadBotsDeployment
+      Description: Production Stage
+      RestApiId: !Ref ApiGatewayBadBots
+      StageName: ProdStage
+      AccessLogSetting:
+        DestinationArn: !GetAtt ApiGatewayBadBotsStageAccessLogGroup.Arn
+        Format: >-
+          {"sourceIp": "$context.identity.sourceIp", "caller": "$context.identity.caller", "user": "$context.identity.user",
+          "requestTime": "$context.requestTime", "httpMethod": "$context.httpMethod", "resourcePath": "$context.resourcePath",
+          "protocol": "$context.protocol", "status": "$context.status", "responseLength": "$context.responseLength",
+          "requestId": "$context.requestId"}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W64
+            reason: "Usage Plan not required."
+
+  ApiGatewayBadBotsStageAccessLogGroup:
+    Type: AWS::Logs::LogGroup

@@ -1,0 +1,23 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+urllib3 = "*"
+pytest = "*"
+boto3 = "*"
+botocore = "*"
+aws-lambda-logging = "*"
+requests = "*"
+
+[dev-packages]
+urllib3 = "*"
+pytest = "*"
+boto3 = "*"
+botocore = "*"
+aws-lambda-logging = "*"
+requests = "*"
+
+[requires]
+python_version = "3.8"

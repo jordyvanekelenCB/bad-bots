@@ -36,9 +36,14 @@ def get_mock_config():
         'IP_SET_BAD_BOTS_IPV6_NAME': 'ip_set_bad_bots_ipv6_test'
     }
 
+    mock_config_section_geolocation = {
+        'API_URL': 'https://extreme-ip-lookup.com/json/'
+    }
+
     # Mock config section
     mock_config = {
         'AWS_WAF': mock_config_section_aws,
+        'GEOLOCATION': mock_config_section_geolocation
     }
 
     return mock_config
@@ -49,7 +54,7 @@ def get_mock_event_ipv4():
 
     event = {
         "httpMethod": "GET",
-        "//body": "{\"name\": \"Sam\"}",
+        "body": "<script></script>EXEC",
         "path": "/users",
         "queryStringParameters": {},
         "pathParameters": {
@@ -64,10 +69,14 @@ def get_mock_event_ipv4():
             },
             "resourcePath": "/{proxy+}",
             "httpMethod": "GET",
+        },
+        "headers" : {
+            "User-Agent": "Mozilla/5.0 (compatible; Sosospider/2.0; +http://help.soso.com/webspider.htm)"
         }
     }
 
     return event
+
 
 @pytest.fixture(autouse=True)
 def cleanup_wafv2(get_mock_config):
@@ -109,4 +118,4 @@ def test_system_ipv4(get_mock_config, get_mock_event_ipv4):
 
     # Assert system test was completed within allotted timeframe (test performance)
     total_duration_in_ms = ((time.time() - start_time) * 1000)
-    assert total_duration_in_ms < 5000
+    assert total_duration_in_ms < 10000

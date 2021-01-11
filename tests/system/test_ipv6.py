@@ -36,9 +36,14 @@ def get_mock_config():
         'IP_SET_BAD_BOTS_IPV6_NAME': 'ip_set_bad_bots_ipv6_test'
     }
 
+    mock_config_section_geolocation = {
+        'API_URL': 'https://extreme-ip-lookup.com/json/'
+    }
+
     # Mock config section
     mock_config = {
         'AWS_WAF': mock_config_section_aws,
+        'GEOLOCATION': mock_config_section_geolocation
     }
 
     return mock_config
@@ -50,23 +55,24 @@ def get_mock_event_ipv6():
 
     event = {
         "httpMethod": "GET",
-        "//body": "{\"name\": \"Sam\"}",
+        "body": "<script></script>EXEC",
         "path": "/users",
-        "resource": "/{proxy+}",
         "queryStringParameters": {},
         "pathParameters": {
             "proxy": "users"
         },
         "requestContext": {
-            "accountId": "111111111111",
+            "accountId": "333333333",
             "identity": {
                 "sourceIp": "2a02:a445:6d36:1:1e3:a188:313c:1d33",
-                "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 "
-                             "(KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36",
+                "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6)"
+                             " AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36",
             },
             "resourcePath": "/{proxy+}",
             "httpMethod": "GET",
-            "apiId": "xxxxxxxxxx"
+        },
+        "headers" : {
+            "User-Agent": "Mozilla/5.0 (compatible; Sosospider/2.0; +http://help.soso.com/webspider.htm)"
         }
     }
 

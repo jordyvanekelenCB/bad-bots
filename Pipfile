@@ -10,6 +10,7 @@ boto3 = "*"
 botocore = "*"
 aws-lambda-logging = "*"
 requests = "*"
+crawlerdetect = "*"
 
 [dev-packages]
 urllib3 = "*"

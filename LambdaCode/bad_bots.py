@@ -1,12 +1,18 @@
 """ This file contains the BadBots class """
 
 # pylint: disable=E0611
+# pylint: disable=E0401
 import logging
+import json
+import re
 from enum import Enum
 from ipaddress import ip_address
 from ipaddress import IPv4Network
 from ipaddress import IPv6Network
+from models import Bot
 from connection import AWSWAFv2Connection
+from connection import HTTPGet
+from crawlerdetect import CrawlerDetect
 
 
 # Setup logger
@@ -19,6 +25,7 @@ class BadBots:
         that made a request to the honeypot trap endpoint and blocks it. """
 
     config_section_bad_bots = 'BAD_BOTS'
+    config_section_geolocation = 'GEOLOCATION'
 
     def __init__(self, config, event):
         self.config = config
@@ -27,28 +34,119 @@ class BadBots:
     def parse_bad_bots(self):
         """ Entry point """
 
-        source_ip_address_list = []
+        # The threshold confidence of the bot. If the bot confidence score is equal or higher than the threshold,
+        # block the bot.
+        bot_confidence_threshold = 7
 
-        # Get source IP address
-        source_ip = str(self.event['requestContext']['identity']['sourceIp'])
+        # Setup properties
+        bot = Bot()
+        bot.source_ip = str(self.event['requestContext']['identity']['sourceIp'])
+        bot.source_ip_type = self.get_ip_type_by_address(bot.source_ip)
+        bot.http_user_agent = str(self.event['headers']['User-Agent'])
+        bot.http_method = str(self.event['httpMethod'])
+        bot.http_body = str(self.event['body'])
+        bot.http_query_string_parameters = str(self.event['queryStringParameters'])
 
-        # Get source IP type
-        source_ip_type = self.get_ip_type_by_address(source_ip)
+        if bot.source_ip_type == self.SourceIPType.IPV4:
+            bot.geolocation = self.get_geolocation(bot.source_ip)
+        else:
+            bot.geolocation = None
 
-        # Check the source IP type and then update the respective IP set
-        if source_ip_type == self.SourceIPType.IPV4:
-            source_ip_address_list.append(IPv4Network(source_ip).with_prefixlen)
-            self.update_bad_bots_ip_set(self.SourceIPType.IPV4, source_ip_address_list)
-        if source_ip_type == self.SourceIPType.IPV6:
-            source_ip_address_list.append(IPv6Network(source_ip).with_prefixlen)
-            self.update_bad_bots_ip_set(self.SourceIPType.IPV6, source_ip_address_list)
+        # Do confidence check based on bot properties
+        bot_confidence_score = self.check_bot_confidence(bot)
+
+        # Was detected as bot? For diagnostics
+        is_bot = False
+
+        if bot_confidence_score >= bot_confidence_threshold:
+
+            is_bot = True
+
+            # Check the source IP type and then update the respective IP set
+            if bot.source_ip_type == self.SourceIPType.IPV4:
+                self.update_bad_bots_ip_set(self.SourceIPType.IPV4, [IPv4Network(bot.source_ip).with_prefixlen])
+            if bot.source_ip_type == self.SourceIPType.IPV6:
+                self.update_bad_bots_ip_set(self.SourceIPType.IPV6, [IPv6Network(bot.source_ip).with_prefixlen])
 
         bad_bots_output = {
-            "source_ip": source_ip,
-            "source_ip_type": source_ip_type.value
+            "source_ip": bot.source_ip,
+            "source_ip_type": bot.source_ip_type.value,
+            "is_bot": is_bot,
+            "bot_confidence_score": bot_confidence_score
         }
 
         return bad_bots_output
+
+    def get_geolocation(self, source_ip):
+        """ Gets the country of origin based on the IP address """
+
+        country = None
+
+        try:
+            response = HTTPGet.http_get_contents(self.config[self.config_section_geolocation]["API_URL"] + source_ip)
+            json_data = json.loads(response)
+            country = json_data["country"]
+
+        except Exception as error:
+            LOGGER.error(error)
+            raise
+
+        return country
+
+    # pylint: disable=R0201
+    def check_bot_confidence(self, bot):
+        """ Indicates whether the client making the request is a bot or not by analysing the request and
+            returning a confidence score
+        """
+
+        bot_confidence_score = 0
+
+        # Confidence: Check user agent
+
+        # Check if user agent is null
+        if bot.http_user_agent == '':
+            bot_confidence_score += 3
+
+        # Use crawler detection
+        crawler_detect = CrawlerDetect()
+        is_crawler = crawler_detect.isCrawler(bot.http_user_agent)
+
+        if is_crawler:
+            bot_confidence_score += 7
+
+        # Confidence: Check user agent, based on
+        # https://www.sans.org/reading-room/whitepapers/detection/identify-malicious-http-requests-34067
+        if bot.http_method in ["CONNECT", "PUT", "DELETE"]:
+            bot_confidence_score += 5
+
+        # Confidence: Check geolocation
+        if bot.geolocation is None:
+            pass # IPv6 geolocation has not been implemented yet
+        else:
+            # If the geolocation is not a country we ship / sell to increase bot confidence
+            if bot.geolocation not in ["Netherlands", "Belgium", "Germany"]:
+                bot_confidence_score += 5
+
+        #Confidence check: body / query string parameters
+
+        # Check for SQL injections
+
+        sqli_regex = re.compile\
+            (r'\b(ALTER|CREATE|DELETE|DROP|EXEC(UTE){0,1}|INSERT( +INTO){0,1}|MERGE|SELECT|UPDATE|UNION( +ALL){0,1})\b')
+
+        if sqli_regex.search(bot.http_body) or sqli_regex.search(bot.http_query_string_parameters):
+            bot_confidence_score += 8
+
+        # Check for XSS
+        xss_regex_1 = re.compile(r'((\%3C)|<)((\%2F)|\/)*[a-z0-9\%]+((\%3E)|>)')
+        if xss_regex_1.search(bot.http_body) or sqli_regex.search(bot.http_query_string_parameters):
+            bot_confidence_score += 8
+
+        xss_regex_2 = re.compile(r'/((\%3C)|<)((\%69)|i|(\%49))((\%6D)|m|(\%4D))((\%67)|g|(\%47))[^\n]+((\%3E)|>)/I')
+        if xss_regex_2.search(bot.http_body) or sqli_regex.search(bot.http_query_string_parameters):
+            bot_confidence_score += 8
+
+        return bot_confidence_score
 
     def get_ip_type_by_address(self, source_ip):
         """ Get the IP address type based on the IP address provided  """
